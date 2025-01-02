@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>圈住小猫</title>
+    <style>
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #f0f0f0;
+        }
+        #status {
+            font-size: 20px;
+            margin-top: 10px;
+        }
+        .restart-btn {
+            margin-top: 15px;
+            padding: 8px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .restart-btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h2>圈住小猫</h2>
+        <canvas id="gameCanvas"></canvas>
+        <p id="status"></p>
+        <button class="restart-btn" id="restartBtn">重新开始</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const GRID_SIZE = 11;
+        const CELL_SIZE = 40;
+        const PADDING = 40;
+        const POINT_RADIUS = 15;
+        const ROW_HEIGHT = CELL_SIZE * 0.866; // sin(60°) = 0.866
+
+        canvas.width = GRID_SIZE * CELL_SIZE + 2 * PADDING;
+        canvas.height = Math.ceil(GRID_SIZE * ROW_HEIGHT) + 2 * PADDING;
+
+        let catPosition;
+        let gameOver = false;
+        let walls = new Set();
+
+        // 创建不规则边界形状
+        const INVALID_CELLS = [
+            [0,0], [0,1], [1,0], // 左上
+            [0,GRID_SIZE-1], [0,GRID_SIZE-2], [1,GRID_SIZE-1], // 右上
+            [GRID_SIZE-1,0], [GRID_SIZE-1,1], // 左下
+            [GRID_SIZE-1,GRID_SIZE-1], [GRID_SIZE-1,GRID_SIZE-2] // 右下
+        ];
+
+        const catImage = new Image();
+        catImage.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjZmZiNmMxIiBkPSJNMjU2IDI0YzEyMy41IDAgMjI0IDEwMC41IDIyNCAyMjRTMzc5LjUgNDcyIDI1NiA0NzIgMzIgMzcxLjUgMzIgMjQ4IDEzMi41IDI0IDI1NiAyNHptMCAxMjhjLTUzIDAtOTYgNDMtOTYgOTZzNDMgOTYgOTYgOTYgOTYtNDMgOTYtOTYtNDMtOTYtOTYtOTZ6bTAgMTQ0YTQ4IDQ4IDAgMSAxIDAtOTYgNDggNDggMCAwIDEgMCA5NnoiLz48L3N2Zz4=';
+
+        // 获取错开的坐标
+        function getOffset(row, col) {
+            const x = col * CELL_SIZE + PADDING + (row % 2) * CELL_SIZE/2;
+            const y = row * ROW_HEIGHT + PADDING;
+            return [x, y];
+        }
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制所有可用点
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    if (!isInvalidCell(i, j)) {
+                        const [x, y] = getOffset(i, j);
+                        
+                        // 绘制圆形背景
+                        ctx.beginPath();
+                        ctx.fillStyle = '#fff';
+                        ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // 绘制圆形边框
+                        ctx.beginPath();
+                        ctx.strokeStyle = '#ccc';
+                        ctx.lineWidth = 2;
+                        ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // 绘制墙
+            walls.forEach(wall => {
+                const [i, j] = wall.split(',').map(Number);
+                const [x, y] = getOffset(i, j);
+                ctx.fillStyle = '#ff6b6b';
+                ctx.beginPath();
+                ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 绘制猫
+            if (catPosition) {
+                const [x, y] = getOffset(catPosition[0], catPosition[1]);
+                ctx.drawImage(catImage, 
+                    x - POINT_RADIUS, 
+                    y - POINT_RADIUS, 
+                    POINT_RADIUS * 2, 
+                    POINT_RADIUS * 2
+                );
+            }
+        }
+
+        // 获取相邻的有效移动位置
+        function getAdjacentPositions(row, col) {
+            const positions = [];
+            const isEvenRow = row % 2 === 0;
+            
+            // 定义六个方向的偏移量
+            const directions = isEvenRow ? [
+                [-1, -1], [-1, 0],  // 左上、右上
+                [0, -1], [0, 1],    // 左、右
+                [1, -1], [1, 0]     // 左下、右下
+            ] : [
+                [-1, 0], [-1, 1],   // 左上、右上
+                [0, -1], [0, 1],    // 左、右
+                [1, 0], [1, 1]      // 左下、右下
+            ];
+
+            directions.forEach(([dx, dy]) => {
+                const newRow = row + dx;
+                const newCol = col + dy;
+                if (isValidPosition(newRow, newCol)) {
+                    positions.push([newRow, newCol]);
+                }
+            });
+
+            return positions;
+        }
+
+        function isInvalidCell(row, col) {
+            return INVALID_CELLS.some(([r, c]) => r === row && c === col);
+        }
+
+        function isValidPosition(row, col) {
+            if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) return false;
+            if (isInvalidCell(row, col)) return false;
+            return !walls.has(`${row},${col}`);
+        }
+
+        function placeCatRandomly() {
+            while (true) {
+                const row = Math.floor(Math.random() * (GRID_SIZE - 4)) + 2;
+                const col = Math.floor(Math.random() * (GRID_SIZE - 4)) + 2;
+                if (isValidPosition(row, col)) {
+                    catPosition = [row, col];
+                    break;
+                }
+            }
+            drawGrid();
+        }
+
+        // 添加检查猫是否被围住的函数
+        function isCatTrapped() {
+            // 从猫的位置开始进行广度优先搜索，检查是否能到达边界
+            const visited = new Set();
+            const queue = [[catPosition[0], catPosition[1]]];
+            visited.add(`${catPosition[0]},${catPosition[1]}`);
+
+            while (queue.length > 0) {
+                const [row, col] = queue.shift();
+                
+                // 如果到达边界，说明猫没有被围住
+                if (row === 0 || row === GRID_SIZE-1 || col === 0 || col === GRID_SIZE-1) {
+                    return false;
+                }
+
+                // 检查所有相邻位置
+                const adjacentPositions = getAdjacentPositions(row, col);
+                for (const [newRow, newCol] of adjacentPositions) {
+                    const key = `${newRow},${newCol}`;
+                    if (!visited.has(key)) {
+                        visited.add(key);
+                        queue.push([newRow, newCol]);
+                    }
+                }
+            }
+
+            // 如果搜索结束都没有到达边界，说明猫被围住了
+            return true;
+        }
+
+        function handleClick(event) {
+            if (gameOver) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+
+            // 找到最近的格点
+            let minDist = Infinity;
+            let closestCell = null;
+
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    if (!isInvalidCell(i, j)) {
+                        const [x, y] = getOffset(i, j);
+                        const dist = Math.sqrt(
+                            Math.pow(clickX - x, 2) + 
+                            Math.pow(clickY - y, 2)
+                        );
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestCell = [i, j];
+                        }
+                    }
+                }
+            }
+
+            if (!closestCell || minDist > POINT_RADIUS) return;
+            const [row, col] = closestCell;
+
+            if (!isValidPosition(row, col)) return;
+            if (row === catPosition[0] && col === catPosition[1]) return;
+
+            walls.add(`${row},${col}`);
+            drawGrid();
+
+            // 在放置墙后立即检查是否围住了猫
+            if (isCatTrapped()) {
+                gameOver = true;
+                document.getElementById('status').textContent = '游戏结束：你赢了！';
+                return;
+            }
+
+            setTimeout(moveCat, 300);
+        }
+
+        // 添加计算到边界最短路径的函数
+        function findPathToBorder(startRow, startCol) {
+            const queue = [[startRow, startCol, []]];
+            const visited = new Set(`${startRow},${startCol}`);
+
+            while (queue.length > 0) {
+                const [row, col, path] = queue.shift();
+
+                // 如果到达边界，返回路径
+                if (row === 0 || row === GRID_SIZE-1 || col === 0 || col === GRID_SIZE-1) {
+                    return path;
+                }
+
+                // 获取所有可能的移动
+                const adjacentPositions = getAdjacentPositions(row, col);
+                for (const [newRow, newCol] of adjacentPositions) {
+                    const key = `${newRow},${newCol}`;
+                    if (!visited.has(key)) {
+                        visited.add(key);
+                        queue.push([newRow, newCol, [...path, [newRow, newCol]]]);
+                    }
+                }
+            }
+            return null; // 没有找到路径
+        }
+
+        function moveCat() {
+            const validMoves = getAdjacentPositions(catPosition[0], catPosition[1]);
+
+            // 首先检查是否有直接到达边界的移动
+            for (const [row, col] of validMoves) {
+                if (row === 0 || row === GRID_SIZE-1 || col === 0 || col === GRID_SIZE-1) {
+                    catPosition = [row, col];
+                    gameOver = true;
+                    document.getElementById('status').textContent = '游戏结束：猫逃跑了！';
+                    drawGrid();
+                    return;
+                }
+            }
+
+            if (validMoves.length === 0) {
+                gameOver = true;
+                document.getElementById('status').textContent = '游戏结束：你赢了！';
+                return;
+            }
+
+            // 为每个可能的移动计算到边界的最短路径
+            let bestMove = null;
+            let shortestPath = Infinity;
+
+            for (const [row, col] of validMoves) {
+                const path = findPathToBorder(row, col);
+                if (path) {
+                    // 如果找到路径，记录最短的
+                    if (!bestMove || path.length < shortestPath) {
+                        bestMove = [row, col];
+                        shortestPath = path.length;
+                    }
+                }
+            }
+
+            // 如果找到通向边界的路径，90%的概率选择最优路径
+            if (bestMove && Math.random() < 0.9) {
+                catPosition = bestMove;
+            } else {
+                // 否则随机移动
+                catPosition = validMoves[Math.floor(Math.random() * validMoves.length)];
+            }
+            
+            drawGrid();
+        }
+
+        // 添加重置游戏函数
+        function resetGame() {
+            gameOver = false;
+            walls.clear();
+            document.getElementById('status').textContent = '';
+            placeCatRandomly();
+        }
+
+        // 添加重启按钮事件监听
+        document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+        catImage.onload = () => {
+            canvas.addEventListener('click', handleClick);
+            placeCatRandomly();
+        };
+    </script>
+</body>
+</html>
