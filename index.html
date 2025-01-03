@@ -9,56 +9,101 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
         }
         body {
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: #f5f5f5;
-            touch-action: none; /* 防止移动端双指缩放 */
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            touch-action: none;
         }
         .game-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 10px;
+            padding: 20px;
             width: 100%;
             max-width: 600px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
         }
         h2 {
-            margin: 10px 0;
-            font-size: clamp(20px, 5vw, 24px);
+            margin: 15px 0;
+            font-size: clamp(24px, 6vw, 32px);
+            color: #2c3e50;
+            text-align: center;
+            font-weight: 600;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1);
         }
         canvas {
-            border: 2px solid #333;
-            background-color: #f0f0f0;
+            border: 3px solid #34495e;
+            background-color: #f8f9fa;
             max-width: 100%;
-            touch-action: none; /* 防止移动端默认行为 */
+            touch-action: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
         }
         #status {
             font-size: clamp(16px, 4vw, 20px);
-            margin: 10px 0;
-            min-height: 24px;
+            margin: 15px 0;
+            height: 60px;
+            color: #2c3e50;
+            font-weight: 500;
+            text-align: center;
+            padding: 5px 15px;
+            border-radius: 8px;
+            background: rgba(44, 62, 80, 0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 5px;
+        }
+        .game-status {
+            color: #e74c3c;
+        }
+        .turn-status {
+            font-size: 0.9em;
+            color: #7f8c8d;
         }
         .restart-btn {
-            margin: 15px 0;
-            padding: 12px 30px;
+            margin: 20px 0;
+            padding: 12px 35px;
             font-size: clamp(16px, 4vw, 18px);
-            background-color: #4CAF50;
+            background: linear-gradient(145deg, #3498db, #2980b9);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
-            transition: background-color 0.3s;
-            -webkit-tap-highlight-color: transparent; /* 移除移动端点击高亮 */
+            transition: all 0.3s ease;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+            -webkit-tap-highlight-color: transparent;
         }
         .restart-btn:hover {
-            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+            background: linear-gradient(145deg, #3498db, #2573a7);
+        }
+        .restart-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 10px rgba(52, 152, 219, 0.3);
         }
         @media (max-width: 480px) {
             .game-container {
-                padding: 5px;
+                padding: 15px;
+                margin: 10px;
+                border-radius: 15px;
+            }
+            h2 {
+                margin: 10px 0;
+            }
+            .restart-btn {
+                padding: 10px 30px;
             }
         }
     </style>
@@ -67,7 +112,10 @@
     <div class="game-container">
         <h2>圈住小猫</h2>
         <canvas id="gameCanvas"></canvas>
-        <p id="status"></p>
+        <div id="status">
+            <div class="game-status"></div>
+            <div class="turn-status">轮到你走了</div>
+        </div>
         <button class="restart-btn" id="restartBtn">重新开始</button>
     </div>
 
@@ -115,9 +163,6 @@
             [GRID_SIZE-1,GRID_SIZE-1], [GRID_SIZE-1,GRID_SIZE-2] // 右下
         ];
 
-        const catImage = new Image();
-        catImage.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjZmZiNmMxIiBkPSJNMjU2IDI0YzEyMy41IDAgMjI0IDEwMC41IDIyNCAyMjRTMzc5LjUgNDcyIDI1NiA0NzIgMzIgMzcxLjUgMzIgMjQ4IDEzMi41IDI0IDI1NiAyNHptMCAxMjhjLTUzIDAtOTYgNDMtOTYgOTZzNDMgOTYgOTYgOTYgOTYtNDMgOTYtOTYtNDMtOTYtOTYtOTZ6bTAgMTQ0YTQ4IDQ4IDAgMSAxIDAtOTYgNDggNDggMCAwIDEgMCA5NnoiLz48L3N2Zz4=';
-
         // 获取错开的坐标
         function getOffset(row, col) {
             const x = col * CELL_SIZE + PADDING + (row % 2) * CELL_SIZE/2;
@@ -136,16 +181,9 @@
                         
                         // 绘制圆形背景
                         ctx.beginPath();
-                        ctx.fillStyle = '#fff';
+                        ctx.fillStyle = '#B3D9FF';
                         ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
                         ctx.fill();
-                        
-                        // 绘制圆形边框
-                        ctx.beginPath();
-                        ctx.strokeStyle = '#ccc';
-                        ctx.lineWidth = 2;
-                        ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
-                        ctx.stroke();
                     }
                 }
             }
@@ -154,21 +192,36 @@
             walls.forEach(wall => {
                 const [i, j] = wall.split(',').map(Number);
                 const [x, y] = getOffset(i, j);
-                ctx.fillStyle = '#ff6b6b';
+                
+                // 绘制墙的阴影
                 ctx.beginPath();
+                ctx.shadowColor = 'rgba(231, 76, 60, 0.3)';
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = '#003366';
                 ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.shadowColor = 'transparent';
             });
 
             // 绘制猫
             if (catPosition) {
                 const [x, y] = getOffset(catPosition[0], catPosition[1]);
-                ctx.drawImage(catImage, 
-                    x - POINT_RADIUS, 
-                    y - POINT_RADIUS, 
-                    POINT_RADIUS * 2, 
-                    POINT_RADIUS * 2
-                );
+                
+                // 绘制猫的背景圆
+                ctx.beginPath();
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = '#FFB6C1';
+                ctx.arc(x, y, POINT_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 绘制文字
+                ctx.shadowColor = 'transparent';
+                ctx.fillStyle = '#000';
+                ctx.font = `bold ${POINT_RADIUS * 1.2}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('猫', x, y);
             }
         }
 
@@ -209,21 +262,46 @@
             return !walls.has(`${row},${col}`);
         }
 
+        // 添加生成随机墙的函数
+        function generateRandomWalls() {
+            const wallsCount = 5;
+            walls.clear();
+            
+            while (walls.size < wallsCount) {
+                const row = Math.floor(Math.random() * GRID_SIZE);
+                const col = Math.floor(Math.random() * GRID_SIZE);
+                
+                // 确保不会在无效格子或猫的位置生成墙
+                if (!isInvalidCell(row, col) && 
+                    (row !== catPosition[0] || col !== catPosition[1])) {
+                    walls.add(`${row},${col}`);
+                }
+            }
+        }
+
         function placeCatRandomly() {
             while (true) {
                 const row = Math.floor(Math.random() * (GRID_SIZE - 4)) + 2;
                 const col = Math.floor(Math.random() * (GRID_SIZE - 4)) + 2;
                 if (isValidPosition(row, col)) {
                     catPosition = [row, col];
+                    // 先放置猫，再生成随机墙
+                    generateRandomWalls();
                     break;
                 }
             }
             drawGrid();
         }
 
-        // 添加检查猫是否被围住的函数
+        // 添加判断是否到达边界的函数
+        function isAtBorder(row, col) {
+            return row === 0 || row === GRID_SIZE-1 || // 第一行和最后一行
+                   col === 0 || col === GRID_SIZE-1 || // 第一列和最后一列
+                   (row === 1 && (col === 0 || col === GRID_SIZE-1)); // 第二行的两端
+        }
+
+        // 修改 isCatTrapped 函数中的边界判断
         function isCatTrapped() {
-            // 从猫的位置开始进行广度优先搜索，检查是否能到达边界
             const visited = new Set();
             const queue = [[catPosition[0], catPosition[1]]];
             visited.add(`${catPosition[0]},${catPosition[1]}`);
@@ -231,12 +309,11 @@
             while (queue.length > 0) {
                 const [row, col] = queue.shift();
                 
-                // 如果到达边界，说明猫没有被围住
-                if (row === 0 || row === GRID_SIZE-1 || col === 0 || col === GRID_SIZE-1) {
+                // 使用新的边界判断函数
+                if (isAtBorder(row, col)) {
                     return false;
                 }
 
-                // 检查所有相邻位置
                 const adjacentPositions = getAdjacentPositions(row, col);
                 for (const [newRow, newCol] of adjacentPositions) {
                     const key = `${newRow},${newCol}`;
@@ -246,8 +323,6 @@
                     }
                 }
             }
-
-            // 如果搜索结束都没有到达边界，说明猫被围住了
             return true;
         }
 
@@ -299,10 +374,11 @@
             // 在放置墙后立即检查是否围住了猫
             if (isCatTrapped()) {
                 gameOver = true;
-                document.getElementById('status').textContent = '游戏结束：你赢了！';
+                updateStatus('游戏结束：你赢了！');
                 return;
             }
 
+            updateStatus('', true);
             setTimeout(moveCat, 300);
         }
 
@@ -314,8 +390,8 @@
             while (queue.length > 0) {
                 const [row, col, path] = queue.shift();
 
-                // 如果到达边界，返回路径
-                if (row === 0 || row === GRID_SIZE-1 || col === 0 || col === GRID_SIZE-1) {
+                // 使用新的边界判断函数
+                if (isAtBorder(row, col)) {
                     return path;
                 }
 
@@ -333,14 +409,22 @@
         }
 
         function moveCat() {
+            // 首先检查猫是否已经在边界
+            if (isAtBorder(catPosition[0], catPosition[1])) {
+                gameOver = true;
+                updateStatus('游戏结束：猫逃跑了！');
+                drawGrid();
+                return;
+            }
+
             const validMoves = getAdjacentPositions(catPosition[0], catPosition[1]);
 
-            // 首先检查是否有直接到达边界的移动
+            // 检查是否有直接到达边界的移动
             for (const [row, col] of validMoves) {
-                if (row === 0 || row === GRID_SIZE-1 || col === 0 || col === GRID_SIZE-1) {
+                if (isAtBorder(row, col)) {
                     catPosition = [row, col];
                     gameOver = true;
-                    document.getElementById('status').textContent = '游戏结束：猫逃跑了！';
+                    updateStatus('游戏结束：猫逃跑了！');
                     drawGrid();
                     return;
                 }
@@ -348,7 +432,7 @@
 
             if (validMoves.length === 0) {
                 gameOver = true;
-                document.getElementById('status').textContent = '游戏结束：你赢了！';
+                updateStatus('游戏结束：你赢了！');
                 return;
             }
 
@@ -367,22 +451,25 @@
                 }
             }
 
+            // 在移动前更新状态
+            updateStatus('', true);
+            
             // 如果找到通向边界的路径，90%的概率选择最优路径
             if (bestMove && Math.random() < 0.9) {
                 catPosition = bestMove;
             } else {
-                // 否则随机移动
                 catPosition = validMoves[Math.floor(Math.random() * validMoves.length)];
             }
             
             drawGrid();
+            // 移动后更新状态
+            updateStatus('');
         }
 
-        // 添加重置游戏函数
+        // 修改重置游戏函数
         function resetGame() {
             gameOver = false;
-            walls.clear();
-            document.getElementById('status').textContent = '';
+            updateStatus('');
             placeCatRandomly();
         }
 
@@ -417,14 +504,25 @@
         }
 
         // 初始化游戏
-        catImage.onload = () => {
-            resizeCanvas();
-            addEventListeners();
-            placeCatRandomly();
-        };
+        resizeCanvas();
+        addEventListeners();
+        placeCatRandomly();
 
         // 添加重启按钮事件监听
         document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+        function updateStatus(gameStatus, isCatTurn = false) {
+            const statusDiv = document.getElementById('status');
+            const gameStatusDiv = statusDiv.querySelector('.game-status');
+            const turnStatusDiv = statusDiv.querySelector('.turn-status');
+            
+            gameStatusDiv.textContent = gameStatus;
+            if (!gameOver) {
+                turnStatusDiv.textContent = isCatTurn ? "轮到猫走了" : "轮到你走了";
+            } else {
+                turnStatusDiv.textContent = "";
+            }
+        }
     </script>
 </body>
 </html>
